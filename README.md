@@ -48,7 +48,18 @@ for _, match := range matches {
 // acti0ns/checkout actions/checkout [[homoglyph]]
 ```
 
-Callers supply the corpus and any verified registry owner IDs. Exact corpus members and pairs with a shared owner are excluded. The index is safe for concurrent checks and copies input metadata and returned paths. Its memory use grows with the number of generated variants.
+Callers supply the corpus and any verified registry owner IDs. By default, exact corpus members and pairs with a shared owner are excluded. Use `CheckWithOptions` to include either:
+
+```go
+matches, err := detector.CheckWithOptions(candidate, typosquatting.CheckOptions{
+    IncludeCorpusMembers: true,
+    IncludeSharedOwners:  true,
+})
+```
+
+Each match includes `CorpusMember` and `SharedOwner` flags so callers can apply their own policy or explain exclusions in an audit. A name never matches itself. Shared-owner checks use the owner IDs supplied with the candidate; missing or empty IDs do not establish shared ownership.
+
+The index is safe for concurrent checks and copies input metadata and returned paths. Its memory use grows with the number of generated variants.
 
 ## Algorithms
 

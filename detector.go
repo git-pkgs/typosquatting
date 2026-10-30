@@ -15,9 +15,18 @@ type Package struct {
 
 // Match identifies a corpus target and alternative paths to the candidate.
 type Match struct {
-	Candidate string
-	Target    string
-	Paths     []Path
+	Candidate    string
+	Target       string
+	Paths        []Path
+	CorpusMember bool
+	SharedOwner  bool
+}
+
+// CheckOptions controls exclusions. The zero value excludes corpus members and
+// pairs with shared owners. Including either retains its flag on each Match.
+type CheckOptions struct {
+	IncludeCorpusMembers bool
+	IncludeSharedOwners  bool
 }
 
 type indexedMatch struct {
@@ -64,23 +73,32 @@ func NewDetector(packages []Package, options Options) (*Detector, error) {
 // Check returns matches sorted by target. Exact corpus members and pairs with
 // shared owners are excluded. Returned slices do not alias the index.
 func (d *Detector) Check(candidate Package) ([]Match, error) {
+	return d.CheckWithOptions(candidate, CheckOptions{})
+}
+
+// CheckWithOptions returns matches sorted by target, with caller-selected exclusions.
+// CorpusMember describes the candidate; SharedOwner describes each pair using the
+// candidate's supplied owner IDs. Equal candidate and target names never match.
+func (d *Detector) CheckWithOptions(candidate Package, options CheckOptions) ([]Match, error) {
 	name, err := d.ecosystem.Normalize(candidate.Name)
 	if err != nil {
 		return nil, err
 	}
-	if _, exists := d.packages[name]; exists {
+	_, corpusMember := d.packages[name]
+	if corpusMember && !options.IncludeCorpusMembers {
 		return nil, nil
 	}
 	var matches []Match
 	for _, match := range d.variants[name] {
-		if sharedOwner(candidate.Owners, d.packages[match.target].Owners) {
+		shared := sharedOwner(candidate.Owners, d.packages[match.target].Owners)
+		if shared && !options.IncludeSharedOwners {
 			continue
 		}
 		paths := make([]Path, len(match.paths))
 		for i, path := range match.paths {
 			paths[i] = slices.Clone(path)
 		}
-		matches = append(matches, Match{Candidate: name, Target: match.target, Paths: paths})
+		matches = append(matches, Match{Candidate: name, Target: match.target, Paths: paths, CorpusMember: corpusMember, SharedOwner: shared})
 	}
 	sort.Slice(matches, func(i, j int) bool { return matches[i].Target < matches[j].Target })
 	return matches, nil
