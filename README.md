@@ -25,7 +25,7 @@ fmt.Println(paths)
 
 Each path describes an alternative way to produce the candidate from the target. The paths above each contain one step: inserting `r` before the name, inserting a key adjacent to `e`, or repeating the initial `r`. Combined edits are not generated.
 
-`Compare` checks a candidate against one target. `Generate` returns distinct variants sorted by name, with all matching paths retained.
+`Compare` checks a candidate against one target, retaining only matching paths as transformations are generated. It avoids building and sorting the full variant set. `Generate` returns distinct variants sorted by name, with all matching paths retained.
 
 ### Check against a corpus
 
@@ -88,7 +88,7 @@ Both constructors fail on invalid or duplicate entries unless the corresponding 
 
 The module includes the 16 algorithm categories from [andrew/typosquatting](https://github.com/andrew/typosquatting), including keyboard substitutions, homoglyphs, delimiter changes, word permutations, and common affixes. `Algorithms()` lists them. A nil `Options.Algorithms` selects all algorithms; an empty slice selects none.
 
-`MaxCandidates` limits raw generation attempts per target, including invalid names and duplicates. The default is 10,000; exceeding it returns `ErrLimit` with no partial results.
+`MaxCandidates` limits raw generation attempts per target, including invalid names and duplicates. The default is 10,000; exceeding it returns `ErrLimit` with no partial results. This applies to `Generate`, `Compare`, and detector builds. `Compare` still checks the full transformation stream to retain all matching paths, so word permutations remain subject to this limit.
 
 ## Supported ecosystems
 

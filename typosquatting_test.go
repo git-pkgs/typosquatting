@@ -278,6 +278,14 @@ func BenchmarkGenerate(b *testing.B) {
 	}
 }
 
+func BenchmarkCompare(b *testing.B) {
+	for b.Loop() {
+		if _, err := typo.Compare("rrequests", "requests", typo.Options{Ecosystem: typo.PyPI}); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
 func BenchmarkCheck(b *testing.B) {
 	detector, err := typo.NewDetector([]typo.Package{{Name: "requests"}, {Name: "flask"}, {Name: "numpy"}}, typo.Options{Ecosystem: typo.PyPI})
 	if err != nil {

@@ -2,7 +2,6 @@
 package typosquatting
 
 import (
-	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -154,6 +153,7 @@ func appendPath(paths []Path, algorithm Algorithm) []Path {
 }
 
 // Compare returns paths from target to candidate, after ecosystem normalization.
+// It retains only matching paths and applies the same work limit as Generate.
 // Equivalent names return no paths.
 func Compare(candidate, target string, options Options) ([]Path, error) {
 	options, err := options.validated()
@@ -171,15 +171,15 @@ func Compare(candidate, target string, options Options) ([]Path, error) {
 	if canonical == targetName {
 		return nil, nil
 	}
-	variants, err := Generate(target, options)
+	var paths []Path
+	err = walkVariants(context.Background(), targetName, options, func(name string, algorithm Algorithm) error {
+		if name == canonical {
+			paths = appendPath(paths, algorithm)
+		}
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}
-	index, found := slices.BinarySearchFunc(variants, canonical, func(v Variant, name string) int {
-		return cmp.Compare(v.Name, name)
-	})
-	if !found {
-		return nil, nil
-	}
-	return variants[index].Paths, nil
+	return paths, nil
 }
