@@ -3,6 +3,7 @@ package typosquatting
 
 import (
 	"cmp"
+	"context"
 	"errors"
 	"fmt"
 	"slices"
@@ -98,28 +99,12 @@ func Generate(target string, options Options) ([]Variant, error) {
 		return nil, err
 	}
 	results := make(map[string][]Path)
-	attempted := 0
-	for _, part := range options.Ecosystem.parts(name) {
-		for _, algorithm := range options.Algorithms {
-			complete := generators[algorithm](part.text, func(candidate string) bool {
-				attempted++
-				if attempted > options.MaxCandidates {
-					return false
-				}
-				canonical, normalizeErr := options.Ecosystem.Normalize(part.prefix + candidate + part.suffix)
-				if normalizeErr != nil || canonical == name {
-					return true
-				}
-				path := Path{algorithm}
-				if !slices.ContainsFunc(results[canonical], func(existing Path) bool { return slices.Equal(existing, path) }) {
-					results[canonical] = append(results[canonical], path)
-				}
-				return true
-			})
-			if !complete {
-				return nil, fmt.Errorf("%w for %q", ErrLimit, target)
-			}
-		}
+	err = walkVariants(context.Background(), name, options, func(candidate string, algorithm Algorithm) error {
+		results[candidate] = appendPath(results[candidate], algorithm)
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 	variants := make([]Variant, 0, len(results))
 	for candidate, paths := range results {
@@ -127,6 +112,45 @@ func Generate(target string, options Options) ([]Variant, error) {
 	}
 	sort.Slice(variants, func(i, j int) bool { return variants[i].Name < variants[j].Name })
 	return variants, nil
+}
+
+func walkVariants(ctx context.Context, name string, options Options, visit func(string, Algorithm) error) error {
+	attempted := 0
+	for _, part := range options.Ecosystem.parts(name) {
+		for _, algorithm := range options.Algorithms {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			var err error
+			generators[algorithm](part.text, func(candidate string) bool {
+				if err = ctx.Err(); err != nil {
+					return false
+				}
+				attempted++
+				if attempted > options.MaxCandidates {
+					err = fmt.Errorf("%w for %q", ErrLimit, name)
+					return false
+				}
+				canonical, normalizeErr := options.Ecosystem.Normalize(part.prefix + candidate + part.suffix)
+				if normalizeErr != nil || canonical == name {
+					return true
+				}
+				err = visit(canonical, algorithm)
+				return err == nil
+			})
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return ctx.Err()
+}
+
+func appendPath(paths []Path, algorithm Algorithm) []Path {
+	if slices.ContainsFunc(paths, func(path Path) bool { return len(path) == 1 && path[0] == algorithm }) {
+		return paths
+	}
+	return append(paths, Path{algorithm})
 }
 
 // Compare returns paths from target to candidate, after ecosystem normalization.

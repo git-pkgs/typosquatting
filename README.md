@@ -59,7 +59,30 @@ matches, err := detector.CheckWithOptions(candidate, typosquatting.CheckOptions{
 
 Each match includes `CorpusMember` and `SharedOwner` flags so callers can apply their own policy or explain exclusions in an audit. A name never matches itself. Shared-owner checks use the owner IDs supplied with the candidate; missing or empty IDs do not establish shared ownership.
 
-The index is safe for concurrent checks and copies input metadata and returned paths. Its memory use grows with the number of generated variants.
+The index is safe for concurrent checks and copies input metadata and returned paths. `NewDetectorContext` adds cancellation, an index limit, and optional skips for invalid or duplicate corpus entries:
+
+```go
+detector, err := typosquatting.NewDetectorContext(ctx, packages,
+    typosquatting.Options{Ecosystem: typosquatting.PyPI},
+    typosquatting.BuildOptions{
+        MaxEntries:     100_000,
+        SkipInvalid:    true,
+        SkipDuplicates: true,
+    },
+)
+if err != nil {
+    return err
+}
+stats := detector.Stats()
+fmt.Println(stats.Packages, stats.Variants, stats.Entries)
+for _, issue := range stats.Skipped {
+    fmt.Println(issue.Index, issue.Name, issue.Err)
+}
+```
+
+`MaxEntries` bounds distinct candidate-target pairs, including matches excluded by the default check policy. It is a count rather than a byte limit; zero leaves it unlimited. `Stats` reports indexed packages, distinct candidate names, pairs, and skipped entries in input order. Duplicate detection uses canonical names and keeps the first package's owners when skipping is enabled.
+
+Both constructors fail on invalid or duplicate entries unless the corresponding skip is enabled. Cancellation, per-target generation limits, and the total index limit always return an error with no partial detector. Use `errors.Is` with `ErrInvalidName`, `ErrDuplicateName`, `ErrLimit`, `ErrIndexLimit`, or the context error to distinguish failures.
 
 ## Algorithms
 
